@@ -7,16 +7,52 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import StandardScaler
 from utils.timefeatures import time_features
-from data_provider.m4 import M4Dataset, M4Meta
+try:
+    from data_provider.m4 import M4Dataset, M4Meta
+    _M4_IMPORT_ERROR = None
+except Exception as e:
+    M4Dataset = None
+    M4Meta = None
+    _M4_IMPORT_ERROR = e
 from data_provider.uea import subsample, interpolate_missing, Normalizer
-from sktime.datasets import load_from_tsfile_to_dataframe
+try:
+    from sktime.datasets import load_from_tsfile_to_dataframe
+    _SKTIME_IMPORT_ERROR = None
+except Exception as e:
+    load_from_tsfile_to_dataframe = None
+    _SKTIME_IMPORT_ERROR = e
 import warnings
 from utils.augmentation import run_augmentation_single
-from datasets import load_dataset
-from huggingface_hub import hf_hub_download
+try:
+    from datasets import load_dataset
+    _DATASETS_IMPORT_ERROR = None
+except Exception as e:
+    load_dataset = None
+    _DATASETS_IMPORT_ERROR = e
+
+try:
+    from huggingface_hub import hf_hub_download
+    _HF_HUB_IMPORT_ERROR = None
+except Exception as e:
+    hf_hub_download = None
+    _HF_HUB_IMPORT_ERROR = e
 warnings.filterwarnings('ignore')
 
 HUGGINGFACE_REPO = "thuml/Time-Series-Library"
+
+
+def _require_datasets():
+    if load_dataset is None:
+        raise ImportError(
+            "Loading datasets from Hugging Face requires the optional 'datasets' package."
+        ) from _DATASETS_IMPORT_ERROR
+
+
+def _require_hf_hub():
+    if hf_hub_download is None:
+        raise ImportError(
+            "Downloading datasets from Hugging Face requires the optional 'huggingface_hub' package."
+        ) from _HF_HUB_IMPORT_ERROR
 
 class Dataset_ETT_hour(Dataset):
     def __init__(self, args, root_path, flag='train', size=None,
@@ -57,6 +93,7 @@ class Dataset_ETT_hour(Dataset):
         if os.path.exists(local_fp):
             df_raw = pd.read_csv(local_fp)
         else:
+            _require_datasets()
             ds = load_dataset(HUGGINGFACE_REPO, name=cfg_name)
             df_raw = ds["train"].to_pandas()
             
@@ -157,6 +194,7 @@ class Dataset_ETT_minute(Dataset):
         if os.path.exists(local_fp):
             df_raw = pd.read_csv(local_fp)
         else:
+            _require_datasets()
             ds = load_dataset(HUGGINGFACE_REPO, name=cfg_name)
             df_raw = ds["train"].to_pandas()
 
@@ -258,6 +296,7 @@ class Dataset_Custom(Dataset):
         if os.path.exists(local_fp):
             df_raw = pd.read_csv(local_fp)
         else:
+            _require_datasets()
             ds = load_dataset(HUGGINGFACE_REPO, name=cfg_name)
             split_name = "train" if "train" in ds else list(ds.keys())[0]
             df_raw = ds[split_name].to_pandas()
@@ -335,6 +374,11 @@ class Dataset_M4(Dataset):
                  features='S', data_path='ETTh1.csv',
                  target='OT', scale=False, inverse=False, timeenc=0, freq='15min',
                  seasonal_patterns='Yearly'):
+        if M4Dataset is None or M4Meta is None:
+            raise ImportError(
+                "M4 dataset support requires optional dependencies. "
+                "Install the missing package(s) for M4 usage or avoid --data m4."
+            ) from _M4_IMPORT_ERROR
         # size [seq_len, label_len, pred_len]
         # init
         self.features = features
@@ -424,6 +468,7 @@ class PSMSegLoader(Dataset):
             test_df       = pd.read_csv(test_path)
             test_label_df = pd.read_csv(label_path)
         else:
+            _require_datasets()
             ds_data  = load_dataset(HUGGINGFACE_REPO, name="PSM-data")
             ds_label = load_dataset(HUGGINGFACE_REPO, name="PSM-label")
             train_df      = ds_data["train"].to_pandas()
@@ -487,6 +532,7 @@ class MSLSegLoader(Dataset):
             test_data  = np.load(test_path)
             test_label = np.load(label_path)
         else:
+            _require_hf_hub()
             train_path = hf_hub_download(repo_id=HUGGINGFACE_REPO, filename="MSL/MSL_train.npy",repo_type="dataset")
             test_path  = hf_hub_download(repo_id=HUGGINGFACE_REPO, filename="MSL/MSL_test.npy",repo_type="dataset")
             label_path = hf_hub_download(repo_id=HUGGINGFACE_REPO, filename="MSL/MSL_test_label.npy",repo_type="dataset")
@@ -550,6 +596,7 @@ class SMAPSegLoader(Dataset):
             test_data  = np.load(test_path)
             test_label = np.load(label_path)
         else:
+            _require_hf_hub()
             train_path = hf_hub_download(repo_id=HUGGINGFACE_REPO, filename="SMAP/SMAP_train.npy",repo_type="dataset")
             test_path  = hf_hub_download(repo_id=HUGGINGFACE_REPO, filename="SMAP/SMAP_test.npy",repo_type="dataset")
             label_path = hf_hub_download(repo_id=HUGGINGFACE_REPO, filename="SMAP/SMAP_test_label.npy",repo_type="dataset")
@@ -615,6 +662,7 @@ class SMDSegLoader(Dataset):
             test_data  = np.load(test_path)
             test_label = np.load(label_path)
         else:
+            _require_hf_hub()
             train_path = hf_hub_download(repo_id=HUGGINGFACE_REPO, filename="SMD/SMD_train.npy",repo_type="dataset")
             test_path  = hf_hub_download(repo_id=HUGGINGFACE_REPO, filename="SMD/SMD_test.npy",repo_type="dataset")
             label_path = hf_hub_download(repo_id=HUGGINGFACE_REPO, filename="SMD/SMD_test_label.npy",repo_type="dataset")
@@ -672,6 +720,7 @@ class SWATSegLoader(Dataset):
             train_data = pd.read_csv(train2_path)
             test_data   = pd.read_csv(test_path)
         else:
+            _require_datasets()
             ds = load_dataset(HUGGINGFACE_REPO, name="SWaT")
             train_data = ds["train"].to_pandas()
             test_data  = ds["test"].to_pandas()
@@ -736,6 +785,11 @@ class UEAloader(Dataset):
     """
 
     def __init__(self, args, root_path, file_list=None, limit_size=None, flag=None):
+        if load_from_tsfile_to_dataframe is None:
+            raise ImportError(
+                "UEA classification support requires sktime. "
+                "Install sktime for classification tasks or avoid --data UEA."
+            ) from _SKTIME_IMPORT_ERROR
         self.args = args
         self.root_path = root_path
         self.flag = flag
@@ -765,6 +819,7 @@ class UEAloader(Dataset):
         local = os.path.join(root_path, fname)
         if os.path.exists(local):
             return local
+        _require_hf_hub()
         return hf_hub_download(HUGGINGFACE_REPO, filename=f"{dataset_name}/{fname}", repo_type="dataset")
 
     def load_all(self, root_path, file_list=None, flag=None):

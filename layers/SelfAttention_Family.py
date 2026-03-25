@@ -3,7 +3,12 @@ import torch.nn as nn
 import numpy as np
 from math import sqrt
 from utils.masking import TriangularCausalMask, ProbMask
-from reformer_pytorch import LSHSelfAttention
+try:
+    from reformer_pytorch import LSHSelfAttention
+    _REFORMER_IMPORT_ERROR = None
+except Exception as e:
+    LSHSelfAttention = None
+    _REFORMER_IMPORT_ERROR = e
 from einops import rearrange, repeat
 
 
@@ -217,6 +222,11 @@ class ReformerLayer(nn.Module):
     def __init__(self, attention, d_model, n_heads, d_keys=None,
                  d_values=None, causal=False, bucket_size=4, n_hashes=4):
         super().__init__()
+        if LSHSelfAttention is None:
+            raise ImportError(
+                "Reformer support requires reformer_pytorch. "
+                "Install reformer_pytorch to use Reformer-based models."
+            ) from _REFORMER_IMPORT_ERROR
         self.bucket_size = bucket_size
         self.attn = LSHSelfAttention(
             dim=d_model,
