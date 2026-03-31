@@ -1,0 +1,8 @@
+{
+  "best_a4_seq_len": 96,
+  "best_a4_pred_len": 1,
+  "a4_better_than_a3_mae_ratio": 0.8333333333333334,
+  "a4_better_than_a3_rmse_ratio": 0.8333333333333334,
+  "a4_stably_better_than_a3": true,
+  "note": "仅在 A4 稳定优于 A3 时，才建议进入 PGGC/EDDR/PIR 机制阶段。"
+}

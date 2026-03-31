@@ -1,6 +1,11 @@
 # Time Series Library (TSLib)
 TSLib is an open-source library for deep learning researchers, especially for deep time series analysis.
 
+## SlopeMine v2 Notes
+
+- `scripts/slopemine_v2/infer_internal_blast_events.py` 会在不读取旧爆破台账的前提下，基于 `patch_series_v2_ps10.csv` 的内部异常反演疑似爆破事件。
+- 该脚本输出 `dataset/slopemine_v2/inferred_blast_ledger_internal_v1.csv`，其中 `coordinate_source=internal_inferred`、`is_real_coordinate=0` 固定写死，`Q` 表示 `Qe` 等效强度而非真实装药量。
+
 > **中文文档**：[README_zh.md](./README_zh.md)
 
 We provide a neat code base to evaluate advanced deep time series models or develop your model, which covers five mainstream tasks: **long- and short-term forecasting, imputation, anomaly detection, and classification.**
@@ -348,3 +353,50 @@ All the experiment datasets are public, and we obtain them from the following li
 <a href="https://github.com/thuml/Time-Series-Library/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=thuml/Time-Series-Library" />
 </a>
+
+## Local Extension: SlopeMine V2
+
+This workspace now includes a local `slopemine v2` pipeline for slope monitoring experiments with engineering zones, zone-aware patches, patch time series, blast features, and formal window metadata.
+
+### What It Does
+
+- Rebuilds `point_meta_v2.csv` from the raw monitoring table and assigns 5 engineering zones with a frozen polygon rule exported to `engineering_zone_polygons_v2.json` and `zone_assignment_rule.md`.
+- Builds refined zone-constrained patches for `patch_size=8` and `patch_size=10`, exports both `background_excluded` and `single_background_patch` variants, and keeps the official `patch_meta_v2_ps10.csv` / `patch_meta_v2_ps8.csv` as the merged-background version with `is_train_patch=0` on the background patch.
+- Aggregates monitoring records into `patch_series_v2_ps10.csv`, aligns a full 720-hour axis, explicitly fills the 8 globally missing hours with `is_global_missing`, and exports a diagnostic package with zone distributions, boxplots, patch density, and selected-time heatmaps.
+- Builds patch-centroid blast V3 features, exports representative heatmaps and lag-correlation, and saves a reusable tensor bundle plus window manifest for `seq_len in {24,48,96}` and `pred_len in {1,3,6,12}`.
+- Runs baseline ablations `A1-A4` and exports total metrics, subset metrics, patch error heatmaps, representative event plots, and the `A4 vs A3` gate summary.
+
+### Main Files
+
+- `scripts/slopemine_v2/config_v2.toml`: Unified local config for paths, frozen polygons, background-patch policy, blast zone coordinates, and experiment settings.
+- `scripts/slopemine_v2/build_patch_dataset_v2.py`: End-to-end builder for tasks A-E plus the formal diagnostic package.
+- `scripts/slopemine_v2/export_final_zone_assignment_figure.py`: Paper-figure exporter for the final engineering zone assignment map.
+- `scripts/slopemine_v2/generate_proxy_blast_ledger.py`: Proxy blast ledger exporter for V3 method development and sensitivity analysis.
+- `scripts/slopemine_v2/analyze_blast_v3_variants.py`: Local event-sensitive blast V3 variant analyzer for current/proxy ledgers.
+- `scripts/slopemine_v2/run_patch_baselines_v2.py`: Baseline runner for task F (`A1-A4` only).
+- `dataset/slopemine_v2/`: Main CSV/NPZ outputs for frozen zone rules, metadata, refined patch variants, series, blast features, adjacency, and window manifest.
+- `outputs/slopemine_v2/`: Figures, diagnostics, the formal diagnostic package, and baseline evaluation results.
+
+### Run Locally
+
+```bash
+MPLCONFIGDIR=/tmp/mpl /opt/homebrew/Caskroom/miniforge/base/envs/torch/bin/python \
+scripts/slopemine_v2/build_patch_dataset_v2.py \
+--config scripts/slopemine_v2/config_v2.toml
+
+MPLCONFIGDIR=/tmp/mpl /opt/homebrew/Caskroom/miniforge/base/envs/torch/bin/python \
+scripts/slopemine_v2/run_patch_baselines_v2.py \
+--config scripts/slopemine_v2/config_v2.toml
+```
+
+### Status
+
+- Done: frozen zone-rule export, refined patch metadata with background-zone special handling, `patch_series_v2_ps10.csv`, formal diagnostic package, paper-ready final zone assignment map, three proxy blast ledgers plus proxy V3 features, baseline ablations A1-A4, total/subset metric tables, patch heatmap, representative event plot, and gate summary.
+- Note: the original continuous cumulative `current_v3 / proxy_v3` features should now be treated as references only. The current local event-sensitive recommendation is `V3a_truncated_Rc60_Hc6`, based on `outputs/slopemine_v2/blast_v3_variants/blast_v3_variant_compare.csv`.
+- Pending: `PGGC / EDDR / PIR` mechanism stage should only continue after checking `outputs/slopemine_v2/baseline_v2/baseline_gate_summary_v2.json`.
+
+## Search Record
+
+- 2026-03-30: Checked [Skills](https://skills.sh/) to confirm the workflow should be split into reusable steps with explicit outputs rather than one long ad-hoc notebook run.
+- 2026-03-30: Reviewed the patch-based forecasting reference [yuqinie98/PatchTST](https://github.com/yuqinie98/PatchTST). Conclusion: the local baseline should stay patch-independent first, then add spatial mechanisms only after the blast V3 gain is stable.
+- 2026-03-30: Reviewed GitHub exogenous-forecasting tooling via [Nixtla/neuralforecast](https://github.com/Nixtla/neuralforecast) and [skforecast/skforecast](https://github.com/skforecast/skforecast). Conclusion: weather, blast V2, and blast V3 are kept as separate feature groups and all splits stay strictly chronological to avoid leakage.
