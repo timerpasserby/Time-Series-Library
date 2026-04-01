@@ -71,8 +71,14 @@ class Model(nn.Module):
         # Without RevIN
         self.use_RevIN = False
         self.norm = Normalize(configs.enc_in, affine=self.use_RevIN)
+        self._mask_cache = {}
 
     def _get_mask(self, device):
+        cache_key = str(device)
+        cached = self._mask_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         dtype = torch.float32
         L = self.args.seq_len * self.args.c_out // self.args.patch_len
         N = self.args.seq_len // self.args.patch_len
@@ -85,6 +91,7 @@ class Model(nn.Module):
             ST[k] = 0.0
             masks.append(torch.stack([S, T, ST], dim=0))
         masks = torch.stack(masks, dim=0)
+        self._mask_cache[cache_key] = masks
         return masks
 
     def forecast(self, x, masks, x_dec, x_mark_dec):

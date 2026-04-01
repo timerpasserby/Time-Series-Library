@@ -222,3 +222,25 @@ patch_len = 8
 stride = 8
 alpha = 0.1
 top_p = 0.5
+
+[timefilter_retune_v1]
+output_subdir = "timefilter_retune"
+experiment = "A4"
+model_name = "TimeFilter"
+seq_lens = [24, 48, 96]
+pred_len = 12
+learning_rates = [1e-4, 3e-4, 5e-4]
+dropouts = [0.1, 0.2, 0.3]
+batch_size = 8
+eval_batch_size = 32
+train_epochs = 8
+weight_decay = 1e-5
+grad_clip = 5.0
+num_workers = 0
+seed = 20260401
+device = "auto"
+missing_hour_policy = "drop_global_missing"
+loss_name = "masked_mse"
+meaningful_improvement_ratio = 0.05
+close_to_lstm_ratio = 0.15
+require_blast_improvement_ratio = 0.05
