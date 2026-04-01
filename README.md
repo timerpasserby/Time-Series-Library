@@ -10,6 +10,8 @@ TSLib is an open-source library for deep learning researchers, especially for de
 - `data_provider/slopemine_formal.py`、`models/slopemine_formal_wrappers.py` 和 `scripts/slopemine_v2/run_formal_patch_experiments_v1.py` 组成正式 patch 级深度实验链路，当前已完成 `LSTM / TCN / DLinear / PatchTST / STGCN / TimeFilter` 的第一轮 `A1-A4` 实验。
 - 正式窗口清单固定写入 `dataset/slopemine_v2/window_manifest_v1_ps10.csv`；对应结果、模型、预测和图表位于 `outputs/slopemine_v2/formal_round1`。
 - 第一轮正式结果显示：按 `val_mae` 选最佳时 `A1=TCN`、`A2=LSTM`、`A3=TCN`、`A4=LSTM`；按 `test_mae` 看四组实验最佳都在 `LSTM`，且 `A3` 略优于 `A4`，说明这一轮里 `blast V3 real-coordinate` 还没有稳定优于 `blast V2`。
+- `models/components/weather_encoder.py`、`models/components/ms_timefilter_graph.py`、`models/ms_timefilter.py` 和 `scripts/slopemine_v2/run_ms_timefilter_experiments_v1.py` 组成新的 `MS-TimeFilter` 机制实验链路：正式天气分支不再用 naive concat，而是 `Linear Projection + Multi-scale Conv1D + Temporal Attention + Time-block Pooling`，并在 `A4` 基础上最小侵入式接入 `PGGC / EDDR / PIR`。
+- 新的 `MS-TimeFilter` runner 固定使用冻结后的正式 split、`patch_size=10`、`307` 个训练 patch、`drop_global_missing` 和 `seq_len=96 / pred_len=12`；本地已完成 shape / 1-epoch 小样本烟测，完整正式矩阵建议在服务器上运行。
 
 > **中文文档**：[README_zh.md](./README_zh.md)
 

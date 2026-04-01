@@ -244,3 +244,44 @@ loss_name = "masked_mse"
 meaningful_improvement_ratio = 0.05
 close_to_lstm_ratio = 0.15
 require_blast_improvement_ratio = 0.05
+
+[ms_timefilter_v1]
+output_subdir = "ms_timefilter_v1"
+seq_len = 96
+pred_len = 12
+batch_size = 8
+train_epochs = 8
+main_learning_rate = 1e-4
+blast_opt_learning_rate = 3e-4
+weight_decay = 1e-5
+grad_clip = 5.0
+num_workers = 0
+seed = 20260401
+device = "auto"
+missing_hour_policy = "drop_global_missing"
+plot_event_windows = 2
+debug_graph_sample_split = "val"
+debug_graph_sample_rank = 1
+
+[ms_timefilter_v1.model]
+d_model = 32
+d_ff = 64
+e_layers = 2
+dropout = 0.1
+n_heads = 4
+patch_len = 8
+stride = 8
+alpha = 0.1
+top_p = 0.5
+
+[ms_timefilter_v1.graph]
+w_s = 1.0
+w_t = 1.0
+lambda_prior = 0.5
+top_k = 8
+learned_chunk_size = 256
+
+[ms_timefilter_v1.pir]
+alpha_v = 1.0
+alpha_a = 0.5
+beta = 0.05

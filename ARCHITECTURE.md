@@ -33,8 +33,20 @@
 - `models/slopemine_formal_wrappers.py`
   负责把 patch-feature 输入包装成现有 `LSTM / TCN / DLinear / PatchTST / STGCN / TimeFilter` 可直接消费的统一接口，并提供 masked loss 与参数统计。
 
+- `models/components/weather_encoder.py`
+  负责正式天气分支编码：`Linear Projection + Multi-scale Conv1D + Temporal Attention + Time-block Pooling`，输出 block-level weather embedding、全局 weather embedding 和 attention 权重样本。
+
+- `models/components/ms_timefilter_graph.py`
+  负责 `PGGC / EDDR` 的稀疏图组件：构造 `A_s / A_t / A_prior`，按 chunked top-k 生成 `A_learned`，并提供 `PGGC` 一次图传播和 `EDDR` 三专家 softmax gate 路由。
+
+- `models/ms_timefilter.py`
+  负责正式 `MS-TimeFilter` 主模型：把 internal / weather / blast V2 / blast V3 组织成 patch-major、block-minor token，按实验阶段接入 `A2 / A3 / A4 / C1 / C2 / C3`，最后复用原始 `TimeFilter_Backbone` 做 temporal backbone。
+
 - `scripts/slopemine_v2/run_formal_patch_experiments_v1.py`
   负责第一轮正式 patch 深度实验：在冻结的正式 split 与 `seq_len=24 / pred_len=12` 下运行六种模型的 `A1-A4`，输出 `results_main_A1_A4.csv`、`results_subsets_A1_A4.csv`、对比表、最佳模型、预测文件和图表。
+
+- `scripts/slopemine_v2/run_ms_timefilter_experiments_v1.py`
+  负责新的 `MS-TimeFilter` 正式机制实验：固定 `seq_len=96 / pred_len=12`，重跑 `A4-LSTM` 和原始 `TimeFilter` 参考，并运行 `A2 / A3 / A4 / C1 / C2 / C3` 主线与 `blast-hours` 优化分支，输出天气调试、图调试、gate 统计、PIR 报告和统一总表。
 
 - `scripts/slopemine_v2/run_patch_baselines_v2.py`
   负责 F：
@@ -61,6 +73,9 @@
 4. `run_formal_patch_experiments_v1.py`
    读取 `patch_tensor_base_v2_ps10.npz`、`experiment_split_plan_v1.csv` 和 `patch_meta_v2_ps10_bg_excluded.csv`；
    先生成正式 `window_manifest_v1_ps10.csv`，再用统一 dataloader 和包装层跑 `LSTM / TCN / DLinear / PatchTST / STGCN / TimeFilter` 六种模型，最后导出正式结果表、子集指标和图表。
+5. `run_ms_timefilter_experiments_v1.py`
+   读取同一套冻结基础张量和正式 split；
+   生成新的 `window_manifest_ms_timefilter_ps10_seq96_pred12.csv`，再分别构造旧 formal wrapper baseline 和多分支 `MS-TimeFilter` dataloader，最后统一输出 `A2~C3` 正式结果、参考对照、天气/图/gate/PIR 调试文件和决策报告。
 
 ## 关键设计决定
 
@@ -103,3 +118,9 @@
 
 - `PatchTST` 已修成非原地归一化：
   为了兼容正式 patch 包装层的反向传播，`models/PatchTST.py` 中涉及输入标准化的 `/=` 被替换成非原地写法，避免梯度图因 in-place 修改而报错。
+
+- `MS-TimeFilter` 与旧 formal wrapper 并存：
+  旧 `formal_round1` 链路继续服务 `LSTM / TCN / DLinear / PatchTST / STGCN / TimeFilter` 参考基线；新的机制实验不再把 weather / blast 直接拼到 patch 特征后再压成单标量，而是通过多分支 token 融合接入 `TimeFilter_Backbone`。
+
+- `PGGC / EDDR / PIR` 当前只算“代码和烟测完成”：
+  由于 `96 x 307` token 图在 CPU 上训练压力很大，本地当前只完成了 `A2 / C2 / C3` 的前向与 1-epoch 小样本烟测；完整正式矩阵应在服务器上运行 `run_ms_timefilter_experiments_v1.py` 后再写入结论。

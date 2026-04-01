@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset
 
 
 EXPERIMENT_FEATURE_SPECS = {
@@ -353,3 +353,203 @@ class SlopeMineFormalDataset(Dataset):
             "y_raw": torch.from_numpy(np.nan_to_num(y_raw, nan=0.0).astype(np.float32)),
             "y_mask": torch.from_numpy(y_mask.astype(np.float32)),
         }
+
+
+def compute_global_feature_scaler(
+    feature_array: np.ndarray,
+    train_end_index: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """仅基于 train 时间段估计全局二维特征的均值和方差。"""
+
+    values = feature_array[:train_end_index].reshape(-1, feature_array.shape[-1]).astype(np.float32)
+    values = values[np.isfinite(values).all(axis=1)]
+    if values.size == 0:
+        return np.zeros(feature_array.shape[-1], dtype=np.float32), np.ones(feature_array.shape[-1], dtype=np.float32)
+
+    feature_mean = values.mean(axis=0).astype(np.float32)
+    feature_std = values.std(axis=0).astype(np.float32)
+    feature_std = np.where(feature_std >= 1e-6, feature_std, 1.0).astype(np.float32)
+    return feature_mean, feature_std
+
+
+def compute_patch_feature_scaler(
+    feature_array: np.ndarray,
+    train_end_index: int,
+    mask: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """仅基于 train 时间段估计 patch 级三维特征的均值和方差。"""
+
+    feature_dim = feature_array.shape[-1]
+    feature_mean = np.zeros(feature_dim, dtype=np.float32)
+    feature_std = np.ones(feature_dim, dtype=np.float32)
+
+    feature_train = feature_array[:train_end_index]
+    if mask is None:
+        mask = np.ones(feature_train.shape[:2], dtype=bool)
+    else:
+        mask = mask[:train_end_index].astype(bool)
+
+    for feature_idx in range(feature_dim):
+        values = feature_train[:, :, feature_idx][mask]
+        values = values[np.isfinite(values)]
+        if values.size == 0:
+            continue
+        feature_mean[feature_idx] = float(values.mean())
+        std = float(values.std())
+        feature_std[feature_idx] = std if std >= 1e-6 else 1.0
+
+    return feature_mean, feature_std
+
+
+class SlopeMineFormalMultiBranchDataset(Dataset):
+    """按正式 split 返回多分支 encoder/decoder 窗口。"""
+
+    def __init__(
+        self,
+        *,
+        manifest: pd.DataFrame,
+        internal_array: np.ndarray,
+        weather_array: np.ndarray,
+        blast_v2_array: np.ndarray,
+        blast_v3_array: np.ndarray,
+        target_array: np.ndarray,
+        input_mask: np.ndarray,
+        target_mask: np.ndarray,
+        internal_mean: np.ndarray,
+        internal_std: np.ndarray,
+        weather_mean: np.ndarray,
+        weather_std: np.ndarray,
+        blast_v2_mean: np.ndarray,
+        blast_v2_std: np.ndarray,
+        blast_v3_mean: np.ndarray,
+        blast_v3_std: np.ndarray,
+        target_mean: np.ndarray,
+        target_std: np.ndarray,
+    ) -> None:
+        self.manifest = manifest.reset_index(drop=True).copy()
+        self.internal_array = internal_array.astype(np.float32)
+        self.weather_array = weather_array.astype(np.float32)
+        self.blast_v2_array = blast_v2_array.astype(np.float32)
+        self.blast_v3_array = blast_v3_array.astype(np.float32)
+        self.target_array = target_array.astype(np.float32)
+        self.input_mask = input_mask.astype(np.float32)
+        self.target_mask = target_mask.astype(np.float32)
+        self.internal_mean = internal_mean.astype(np.float32)
+        self.internal_std = internal_std.astype(np.float32)
+        self.weather_mean = weather_mean.astype(np.float32)
+        self.weather_std = weather_std.astype(np.float32)
+        self.blast_v2_mean = blast_v2_mean.astype(np.float32)
+        self.blast_v2_std = blast_v2_std.astype(np.float32)
+        self.blast_v3_mean = blast_v3_mean.astype(np.float32)
+        self.blast_v3_std = blast_v3_std.astype(np.float32)
+        self.target_mean = target_mean.astype(np.float32)
+        self.target_std = target_std.astype(np.float32)
+
+    def __len__(self) -> int:
+        return len(self.manifest)
+
+    def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
+        row = self.manifest.iloc[index]
+        encoder_slice = slice(int(row.encoder_start_index), int(row.encoder_end_index_exclusive))
+        decoder_slice = slice(int(row.decoder_start_index), int(row.decoder_end_index_exclusive))
+
+        enc_mask = self.input_mask[encoder_slice]
+        internal_seq = self.internal_array[encoder_slice]
+        internal_seq = (internal_seq - self.internal_mean[None, None, :]) / self.internal_std[None, None, :]
+        internal_seq = np.nan_to_num(internal_seq, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+
+        weather_seq = self.weather_array[encoder_slice]
+        weather_seq = (weather_seq - self.weather_mean[None, :]) / self.weather_std[None, :]
+        weather_seq = np.nan_to_num(weather_seq, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+
+        blast_v2_seq = self.blast_v2_array[encoder_slice]
+        blast_v2_seq = (blast_v2_seq - self.blast_v2_mean[None, :]) / self.blast_v2_std[None, :]
+        blast_v2_seq = np.nan_to_num(blast_v2_seq, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+
+        blast_v3_seq = self.blast_v3_array[encoder_slice]
+        blast_v3_seq = (blast_v3_seq - self.blast_v3_mean[None, None, :]) / self.blast_v3_std[None, None, :]
+        blast_v3_seq = np.nan_to_num(blast_v3_seq, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+
+        y_raw = self.target_array[decoder_slice]
+        y_mask = self.target_mask[decoder_slice]
+        y = (y_raw - self.target_mean[None, :]) / self.target_std[None, :]
+        y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+
+        return {
+            "sample_id": torch.tensor(int(row.sample_id), dtype=torch.long),
+            "internal_seq": torch.from_numpy(internal_seq),
+            "weather_seq": torch.from_numpy(weather_seq),
+            "blast_v2_seq": torch.from_numpy(blast_v2_seq),
+            "blast_v3_seq": torch.from_numpy(blast_v3_seq),
+            "enc_mask": torch.from_numpy(enc_mask.astype(np.float32)),
+            "y": torch.from_numpy(y),
+            "y_raw": torch.from_numpy(np.nan_to_num(y_raw, nan=0.0).astype(np.float32)),
+            "y_mask": torch.from_numpy(y_mask.astype(np.float32)),
+        }
+
+
+def build_multibranch_dataloaders(
+    *,
+    manifest: pd.DataFrame,
+    bundle: FormalWindowBundle,
+    train_end_index: int,
+    batch_size: int,
+    num_workers: int,
+) -> tuple[
+    dict[str, DataLoader],
+    dict[str, SlopeMineFormalMultiBranchDataset],
+    dict[str, dict[str, np.ndarray]],
+    dict[str, np.ndarray],
+]:
+    """构造多分支 MS-TimeFilter 训练/验证/测试 dataloader。"""
+
+    internal_mean, internal_std = compute_patch_feature_scaler(
+        bundle.internal,
+        train_end_index,
+        mask=bundle.input_mask[:train_end_index],
+    )
+    weather_mean, weather_std = compute_global_feature_scaler(bundle.weather, train_end_index)
+    blast_v2_mean, blast_v2_std = compute_global_feature_scaler(bundle.blast_v2, train_end_index)
+    blast_v3_mean, blast_v3_std = compute_patch_feature_scaler(bundle.blast_v3, train_end_index)
+    target_mean, target_std = compute_target_scaler(bundle.target, bundle.target_mask, train_end_index)
+
+    datasets: dict[str, SlopeMineFormalMultiBranchDataset] = {}
+    loaders: dict[str, DataLoader] = {}
+    for split_name, shuffle in [("train", True), ("val", False), ("test", False)]:
+        split_manifest = manifest.loc[manifest["split_name"] == split_name].sort_values("sample_id").reset_index(drop=True)
+        dataset = SlopeMineFormalMultiBranchDataset(
+            manifest=split_manifest,
+            internal_array=bundle.internal,
+            weather_array=bundle.weather,
+            blast_v2_array=bundle.blast_v2,
+            blast_v3_array=bundle.blast_v3,
+            target_array=bundle.target,
+            input_mask=bundle.input_mask,
+            target_mask=bundle.target_mask,
+            internal_mean=internal_mean,
+            internal_std=internal_std,
+            weather_mean=weather_mean,
+            weather_std=weather_std,
+            blast_v2_mean=blast_v2_mean,
+            blast_v2_std=blast_v2_std,
+            blast_v3_mean=blast_v3_mean,
+            blast_v3_std=blast_v3_std,
+            target_mean=target_mean,
+            target_std=target_std,
+        )
+        datasets[split_name] = dataset
+        loaders[split_name] = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            drop_last=False,
+        )
+
+    feature_scalers = {
+        "internal": {"mean": internal_mean, "std": internal_std},
+        "weather": {"mean": weather_mean, "std": weather_std},
+        "blast_v2": {"mean": blast_v2_mean, "std": blast_v2_std},
+        "blast_v3": {"mean": blast_v3_mean, "std": blast_v3_std},
+    }
+    return loaders, datasets, feature_scalers, {"target_mean": target_mean, "target_std": target_std}
