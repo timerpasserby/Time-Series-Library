@@ -65,6 +65,22 @@ DESCRIPTION_MAP = {
 }
 
 
+def save_evaluation_bundle(path: Path, evaluation: dict[str, Any]) -> None:
+    save_data = {
+        "total_metrics_mae": float(evaluation["total_metrics"]["mae"]),
+        "total_metrics_rmse": float(evaluation["total_metrics"]["rmse"]),
+        "total_metrics_mse": float(evaluation["total_metrics"]["mse"]),
+        "patch_mae": evaluation["patch_mae"],
+    }
+    if "gate_mean" in evaluation:
+        save_data["gate_mean"] = evaluation["gate_mean"]
+    if "subset_metrics" in evaluation:
+        for subset_name, metrics in evaluation["subset_metrics"].items():
+            for metric_name, value in metrics.items():
+                save_data[f"subset_{subset_name}_{metric_name}"] = float(value)
+    np.savez_compressed(path, **save_data)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run MS-TimeFilter formal experiments on the frozen slopemine split.")
     parser.add_argument(
@@ -357,6 +373,51 @@ def get_sample_batch(dataset, sample_id: int) -> dict[str, torch.Tensor]:
     return batch
 
 
+def load_model_for_inference(
+    spec: dict[str, Any],
+    checkpoint_path: Path,
+    config: dict[str, Any],
+    bundle,
+    patch_meta: pd.DataFrame,
+    device: torch.device,
+) -> MSTimeFilter:
+    model = MSTimeFilter(
+        experiment_id=str(spec["experiment_id"]),
+        patch_meta=patch_meta,
+        seq_len=int(config["seq_len"]),
+        pred_len=int(config["pred_len"]),
+        patch_count=bundle.target.shape[1],
+        internal_dim=bundle.internal.shape[-1],
+        weather_dim=bundle.weather.shape[-1],
+        blast_v2_dim=bundle.blast_v2.shape[-1],
+        blast_v3_dim=bundle.blast_v3.shape[-1],
+        model_cfg=dict(config["model"]),
+        graph_cfg=dict(config["graph"]),
+    ).to(device)
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model.eval()
+    return model
+
+
+def build_gate_subset_frame_from_saved(
+    gate_mean: np.ndarray,
+    subset_lookup: dict[str, np.ndarray],
+    eval_data,
+) -> pd.DataFrame:
+    mean_values = gate_mean.mean(axis=0)
+    rows = [
+        {
+            "subset": "all",
+            "sample_count": int(gate_mean.shape[0]),
+            "spatial_mean": float(mean_values[0]),
+            "temporal_mean": float(mean_values[1]),
+            "spatiotemporal_mean": float(mean_values[2]),
+        }
+    ]
+    return pd.DataFrame(rows)
+
+
 def train_baseline_spec(
     *,
     spec: dict[str, Any],
@@ -519,7 +580,7 @@ def train_ms_spec(
     config: dict[str, Any],
     device: torch.device,
     subset_lookup: dict[str, np.ndarray],
-) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any], Any]:
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     train_end_index = int(split_plan.loc[split_plan["split_name"] == "train", "effective_end_index_exclusive"].iloc[0])
     loaders, datasets, _feature_scalers, target_scaler = build_multibranch_dataloaders(
         manifest=manifest,
@@ -619,6 +680,11 @@ def train_ms_spec(
     save_prediction_bundle(prediction_val_path, val_eval)
     save_prediction_bundle(prediction_test_path, test_eval)
 
+    eval_output = output_dirs["root"] / "evaluations"
+    eval_output.mkdir(parents=True, exist_ok=True)
+    save_evaluation_bundle(eval_output / f"{stem}_val_eval.npz", val_eval)
+    save_evaluation_bundle(eval_output / f"{stem}_test_eval.npz", test_eval)
+
     main_row = {
         "experiment_id": str(spec["experiment_id"]),
         "branch_name": str(spec["branch_name"]),
@@ -662,14 +728,9 @@ def train_ms_spec(
                     **metrics,
                 }
             )
-    artifacts = {
-        "val_eval": val_eval,
-        "test_eval": test_eval,
-        "datasets": datasets,
-        "target_scaler": target_scaler,
-        "model": model,
-    }
-    return main_row, subset_rows, artifacts, patch_meta
+    del model, loaders, datasets, optimizer
+    torch.cuda.empty_cache()
+    return main_row, subset_rows
 
 
 def plot_multi_prediction_windows(
@@ -1025,7 +1086,6 @@ def main() -> None:
 
     main_rows: list[dict[str, Any]] = []
     subset_rows: list[dict[str, Any]] = []
-    ms_artifacts: dict[tuple[str, str], dict[str, Any]] = {}
 
     for spec in baseline_specs:
         main_row, subset_part = train_baseline_spec(
@@ -1042,7 +1102,7 @@ def main() -> None:
         subset_rows.extend(subset_part)
 
     for spec in ms_specs:
-        main_row, subset_part, artifacts, _ = train_ms_spec(
+        main_row, subset_part = train_ms_spec(
             spec=spec,
             manifest=manifest,
             bundle=bundle,
@@ -1055,7 +1115,6 @@ def main() -> None:
         )
         main_rows.append(main_row)
         subset_rows.extend(subset_part)
-        ms_artifacts[(str(spec["experiment_id"]), str(spec["branch_name"]))] = artifacts
 
     results_main = pd.DataFrame(main_rows).sort_values(["experiment_id", "branch_name"]).reset_index(drop=True)
     results_subsets = pd.DataFrame(subset_rows).sort_values(["experiment_id", "branch_name", "split", "subset"]).reset_index(drop=True)
@@ -1126,21 +1185,29 @@ def main() -> None:
     )
 
     for experiment_id in ["A2", "A3", "A4", "C1", "C2", "C3"]:
-        key = (experiment_id, "main")
-        if key not in ms_artifacts:
+        eval_path = output_dirs["evaluations"] / f"{experiment_id}_main_test_eval.npz"
+        if not eval_path.exists():
             continue
+        eval_data = np.load(eval_path, allow_pickle=True)
         plot_patch_mae_heatmap(
             patch_meta=patch_meta,
-            patch_mae=ms_artifacts[key]["test_eval"]["patch_mae"],
+            patch_mae=eval_data["patch_mae"],
             title=f"{experiment_id} patch MAE heatmap",
             output_path=output_dirs["figures"] / f"patch_mae_heatmap_{experiment_id}.png",
         )
 
-    a4_key = ("A4", "main")
-    a4_artifact = ms_artifacts[a4_key]
-    a4_model = a4_artifact["model"]
+    a4_spec = {"experiment_id": "A4", "branch_name": "main"}
+    a4_row = results_main.loc[(results_main["experiment_id"] == "A4") & (results_main["branch_name"] == "main")].iloc[0]
+    a4_model = load_model_for_inference(a4_spec, Path(a4_row["checkpoint_path"]), ms_cfg, bundle, patch_meta, device)
     weather_debug_sample = int(selected_samples[0])
-    weather_batch = move_batch_to_device(get_sample_batch(a4_artifact["datasets"]["test"], weather_debug_sample), device)
+    _, datasets_a4, _, _ = build_multibranch_dataloaders(
+        manifest=manifest,
+        bundle=bundle,
+        train_end_index=int(split_plan.loc[split_plan["split_name"] == "train", "effective_end_index_exclusive"].iloc[0]),
+        batch_size=int(ms_cfg["batch_size"]),
+        num_workers=int(ms_cfg["num_workers"]),
+    )
+    weather_batch = move_batch_to_device(get_sample_batch(datasets_a4["test"], weather_debug_sample), device)
     weather_debug = a4_model(weather_batch, return_aux=True)
     sample_row = manifest_test.loc[manifest_test["sample_id"] == weather_debug_sample].iloc[0]
     encoder_range = slice(int(sample_row.encoder_start_index), int(sample_row.encoder_end_index_exclusive))
@@ -1150,11 +1217,21 @@ def main() -> None:
         attention_weights=weather_debug["aux"]["weather_attention_weights"][0].detach().cpu().numpy(),
         debug_shapes=weather_debug["aux"]["weather_debug_shapes"],
     )
+    del a4_model, datasets_a4
+    torch.cuda.empty_cache()
 
-    c1_key = ("C1", "main")
-    c1_artifact = ms_artifacts[c1_key]
-    c1_batch = move_batch_to_device(get_sample_batch(c1_artifact["datasets"][debug_split_name], debug_sample_id), device)
-    c1_debug = c1_artifact["model"](c1_batch, return_aux=True)
+    c1_spec = {"experiment_id": "C1", "branch_name": "main"}
+    c1_row = results_main.loc[(results_main["experiment_id"] == "C1") & (results_main["branch_name"] == "main")].iloc[0]
+    c1_model = load_model_for_inference(c1_spec, Path(c1_row["checkpoint_path"]), ms_cfg, bundle, patch_meta, device)
+    _, datasets_c1, _, _ = build_multibranch_dataloaders(
+        manifest=manifest,
+        bundle=bundle,
+        train_end_index=int(split_plan.loc[split_plan["split_name"] == "train", "effective_end_index_exclusive"].iloc[0]),
+        batch_size=int(ms_cfg["batch_size"]),
+        num_workers=int(ms_cfg["num_workers"]),
+    )
+    c1_batch = move_batch_to_device(get_sample_batch(datasets_c1[debug_split_name], debug_sample_id), device)
+    c1_debug = c1_model(c1_batch, return_aux=True)
     graph_state = c1_debug["aux"]["graph_state"]
     graph_heatmap_paths = {
         "A_prior": output_dirs["figures"] / "graph_A_prior_C1.png",
@@ -1176,26 +1253,39 @@ def main() -> None:
         "comparison_A4_C1",
         add_blast_subset_metrics(results_main.loc[results_main["experiment_id"].isin(["A4", "C1"])].reset_index(drop=True), results_subsets),
     )
+    del c1_model, datasets_c1
+    torch.cuda.empty_cache()
 
-    c2_key = ("C2", "main")
-    c2_artifact = ms_artifacts[c2_key]
-    gate_frame = build_gate_subset_frame(evaluation=c2_artifact["test_eval"], subset_lookup=subset_lookup)
-    gate_frame.to_csv(output_root / "eddr_gate_stats.csv", index=False)
-    if "gate_mean" in c2_artifact["test_eval"]:
-        plot_gate_usage(
-            c2_artifact["test_eval"]["gate_mean"],
-            output_dirs["figures"] / "eddr_gate_usage_bar.png",
-            "EDDR expert average usage",
-        )
+    c2_spec = {"experiment_id": "C2", "branch_name": "main"}
+    c2_eval_path = output_dirs["evaluations"] / "C2_main_test_eval.npz"
+    c2_eval_data = np.load(c2_eval_path, allow_pickle=True)
+    c2_row = results_main.loc[(results_main["experiment_id"] == "C2") & (results_main["branch_name"] == "main")].iloc[0]
+
+    gate_mean = c2_eval_data.get("gate_mean", None)
+    if gate_mean is not None:
+        gate_frame = build_gate_subset_frame_from_saved(gate_mean, subset_lookup, c2_eval_data)
+        gate_frame.to_csv(output_root / "eddr_gate_stats.csv", index=False)
+        plot_gate_usage(gate_mean, output_dirs["figures"] / "eddr_gate_usage_bar.png", "EDDR expert average usage")
         plot_gate_subset_compare(gate_frame, output_dirs["figures"] / "eddr_gate_subset_compare.png")
-        c2_batch = move_batch_to_device(get_sample_batch(c2_artifact["datasets"]["test"], weather_debug_sample), device)
-        c2_debug = c2_artifact["model"](c2_batch, return_aux=True)
+
+        c2_model = load_model_for_inference(c2_spec, Path(c2_row["checkpoint_path"]), ms_cfg, bundle, patch_meta, device)
+        _, datasets_c2, _, _ = build_multibranch_dataloaders(
+            manifest=manifest,
+            bundle=bundle,
+            train_end_index=int(split_plan.loc[split_plan["split_name"] == "train", "effective_end_index_exclusive"].iloc[0]),
+            batch_size=int(ms_cfg["batch_size"]),
+            num_workers=int(ms_cfg["num_workers"]),
+        )
+        c2_batch = move_batch_to_device(get_sample_batch(datasets_c2["test"], weather_debug_sample), device)
+        c2_debug = c2_model(c2_batch, return_aux=True)
         plot_gate_over_time(
             c2_debug["aux"]["gate_weights"][0].detach().cpu().numpy(),
             patch_count=bundle.target.shape[1],
             time_block_count=int(ms_cfg["seq_len"]) // int(ms_cfg["model"]["patch_len"]),
             output_path=output_dirs["figures"] / "eddr_gate_over_time.png",
         )
+        del c2_model, datasets_c2
+        torch.cuda.empty_cache()
     eddr_lines = [
         "# eddr_gate_report",
         "",
@@ -1212,8 +1302,6 @@ def main() -> None:
         add_blast_subset_metrics(results_main.loc[results_main["experiment_id"].isin(["C1", "C2"])].reset_index(drop=True), results_subsets),
     )
 
-    c3_key = ("C3", "main")
-    c3_artifact = ms_artifacts[c3_key]
     c2_pred_bundle = np.load(results_main.loc[(results_main["experiment_id"] == "C2") & (results_main["branch_name"] == "main"), "prediction_test_path"].iloc[0])
     c3_pred_bundle = np.load(results_main.loc[(results_main["experiment_id"] == "C3") & (results_main["branch_name"] == "main"), "prediction_test_path"].iloc[0])
     c2_lookup = {int(sample_id): idx for idx, sample_id in enumerate(c2_pred_bundle["sample_ids"].tolist())}
