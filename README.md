@@ -5,6 +5,11 @@ TSLib is an open-source library for deep learning researchers, especially for de
 
 - `scripts/slopemine_v2/infer_internal_blast_events.py` 会在不读取旧爆破台账的前提下，基于 `patch_series_v2_ps10.csv` 的内部异常反演疑似爆破事件。
 - 该脚本输出 `dataset/slopemine_v2/inferred_blast_ledger_internal_v1.csv`，其中 `coordinate_source=internal_inferred`、`is_real_coordinate=0` 固定写死，`Q` 表示 `Qe` 等效强度而非真实装药量。
+- `scripts/slopemine_v2/generate_experiment_plan_v1.py` 会基于冻结后的 `ps10` 数据自动搜索正式 train / val / test 候选，并导出推荐 split、数据版本清单、实验矩阵和第四章补写项。
+- `scripts/slopemine_v2/tune_window_config_v1.py` 会在正式 split 下重新搜索 `seq_len / pred_len`，当前正式推荐基础配置已更新为 `seq_len=24, pred_len=12`。
+- `data_provider/slopemine_formal.py`、`models/slopemine_formal_wrappers.py` 和 `scripts/slopemine_v2/run_formal_patch_experiments_v1.py` 组成正式 patch 级深度实验链路，当前已完成 `LSTM / TCN / DLinear / PatchTST / STGCN / TimeFilter` 的第一轮 `A1-A4` 实验。
+- 正式窗口清单固定写入 `dataset/slopemine_v2/window_manifest_v1_ps10.csv`；对应结果、模型、预测和图表位于 `outputs/slopemine_v2/formal_round1`。
+- 第一轮正式结果显示：按 `val_mae` 选最佳时 `A1=TCN`、`A2=LSTM`、`A3=TCN`、`A4=LSTM`；按 `test_mae` 看四组实验最佳都在 `LSTM`，且 `A3` 略优于 `A4`，说明这一轮里 `blast V3 real-coordinate` 还没有稳定优于 `blast V2`。
 
 > **中文文档**：[README_zh.md](./README_zh.md)
 

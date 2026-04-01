@@ -1,0 +1,4 @@
+plan_version,selected_candidate_id,split_name,effective_start_index,effective_end_index_exclusive,effective_steps,ratio,start_timestamp,end_timestamp,blast_hours,rain_hours,excluded_global_missing_hours_in_natural_range,is_last_contiguous_block,uses_effective_timeline
+v1,split_cand_01,train,0,456,456,0.6404494382022472,2024-06-01 00:00:00,2024-06-20 06:00:00,41,78,7,0,1
+v1,split_cand_01,val,456,584,128,0.1797752808988764,2024-06-20 07:00:00,2024-06-25 15:00:00,8,18,1,0,1
+v1,split_cand_01,test,584,712,128,0.1797752808988764,2024-06-25 16:00:00,2024-06-30 23:00:00,8,24,0,1,1

@@ -169,3 +169,56 @@ toe = 1.35
 middle_slope = 1.00
 platform = 0.75
 crest = 0.60
+
+[experiment_plan_v1]
+output_subdir = "experiment_plan_v1"
+train_ratio_min = 0.50
+train_ratio_max = 0.70
+val_ratio_min = 0.15
+val_ratio_max = 0.30
+test_ratio_min = 0.15
+ratio_step = 0.01
+train_ratio_target = 0.65
+val_ratio_target = 0.175
+test_ratio_target = 0.175
+effective_disp_max_quantile = 0.95
+coverage_target_blast_hours = 8
+coverage_target_rain_hours = 12
+score_weight_distribution = 0.60
+score_weight_ratio = 0.25
+score_weight_coverage = 0.15
+candidate_top_k = 12
+
+[formal_round1]
+output_subdir = "formal_round1"
+use_tuned_window = true
+default_seq_len = 24
+default_pred_len = 12
+batch_size = 8
+train_epochs = 8
+learning_rate = 0.001
+weight_decay = 1e-5
+grad_clip = 5.0
+num_workers = 0
+seed = 20260401
+device = "auto"
+missing_hour_policy = "drop_global_missing"
+loss_name = "masked_mse"
+models = ["LSTM", "TCN", "DLinear", "PatchTST", "STGCN", "TimeFilter"]
+experiments = ["A1", "A2", "A3", "A4"]
+plot_event_windows = 2
+
+[formal_round1.model]
+d_model = 32
+d_ff = 64
+e_layers = 2
+dropout = 0.1
+n_heads = 4
+d_conv = 3
+moving_avg = 3
+factor = 3
+activation = "gelu"
+patch_len = 8
+stride = 8
+alpha = 0.1
+top_p = 0.5

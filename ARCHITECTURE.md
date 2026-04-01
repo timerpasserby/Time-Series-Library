@@ -21,6 +21,21 @@
 - `scripts/slopemine_v2/infer_internal_blast_events.py`
   负责完全忽略旧爆破输入，只基于 `patch_series_v2_ps10.csv` 的内部异常反演 `15-25` 个疑似爆破事件，输出 `Qe` 等效强度台账、候选小时排名、空间图、分区叠加图和内部诊断报告。
 
+- `scripts/slopemine_v2/generate_experiment_plan_v1.py`
+  负责基于冻结后的 `ps10` 数据资产自动搜索正式 train / val / test 候选方案，输出推荐 split、数据清单、实验矩阵和第四章补写项。
+
+- `scripts/slopemine_v2/tune_window_config_v1.py`
+  负责在正式 split 下扫描 `seq_len / pred_len` 组合，输出窗口搜索指标表、最佳基础配置 JSON 和简明摘要，用于替换旧整轴切分下的历史窗口推荐。
+
+- `data_provider/slopemine_formal.py`
+  负责正式 patch 深度实验的数据加载与窗口构造：把 720 小时整轴按 `drop_global_missing` 压缩为 712 个有效时间步，严格依据 `experiment_split_plan_v1.csv` 生成 `window_manifest_v1_ps10.csv`，并提供 A1-A4 特征拼接、subset 掩码和 dataset 类。
+
+- `models/slopemine_formal_wrappers.py`
+  负责把 patch-feature 输入包装成现有 `LSTM / TCN / DLinear / PatchTST / STGCN / TimeFilter` 可直接消费的统一接口，并提供 masked loss 与参数统计。
+
+- `scripts/slopemine_v2/run_formal_patch_experiments_v1.py`
+  负责第一轮正式 patch 深度实验：在冻结的正式 split 与 `seq_len=24 / pred_len=12` 下运行六种模型的 `A1-A4`，输出 `results_main_A1_A4.csv`、`results_subsets_A1_A4.csv`、对比表、最佳模型、预测文件和图表。
+
 - `scripts/slopemine_v2/run_patch_baselines_v2.py`
   负责 F：
   读取基础张量和窗口清单，运行 `A1-A4` 共享权重 summary ridge 基线，输出总表、子集表、patch 误差热力图、代表性事件图和 `A4 vs A3` 门槛判断。
@@ -43,6 +58,9 @@
 3. `run_patch_baselines_v2.py`
    读取 `patch_tensor_base_v2_ps10.npz`、`window_manifest_v2_ps10.csv` 和 `patch_meta_v2_ps10.csv`；
    自动只使用 `is_train_patch=1` 对应的 patch 顺序，按 `A1-A4` 组合特征并输出 baseline 结果。
+4. `run_formal_patch_experiments_v1.py`
+   读取 `patch_tensor_base_v2_ps10.npz`、`experiment_split_plan_v1.csv` 和 `patch_meta_v2_ps10_bg_excluded.csv`；
+   先生成正式 `window_manifest_v1_ps10.csv`，再用统一 dataloader 和包装层跑 `LSTM / TCN / DLinear / PatchTST / STGCN / TimeFilter` 六种模型，最后导出正式结果表、子集指标和图表。
 
 ## 关键设计决定
 
@@ -67,9 +85,21 @@
 - 内部反演爆破事件与真实坐标严格区分：
   `infer_internal_blast_events.py` 输出的是内部异常驱动的疑似事件台账，`coordinate_source` 固定为 `internal_inferred`，`is_real_coordinate=0`，`Q` 明确表示 `Qe` 等效强度而非真实装药量。
 
+- 正式实验 split 改按有效时间步冻结：
+  `generate_experiment_plan_v1.py` 不再把 720 个自然小时直接等比例切开，而是先剔除 8 个 `is_global_missing=1` 的全局缺失小时，再在 712 个有效时间步上做连续切分；正式实验应以 `experiment_split_plan_v1.csv` 为准，而不是旧 `window_manifest_v2_ps10.csv` 的默认切分。
+
+- 基础窗口参数也改按正式 split 选：
+  `tune_window_config_v1.py` 在 712 个有效时间步和正式 train / val / test 切分上重新比较窗口组合；实验矩阵和第四章补写项优先引用这份正式窗口搜索结果，而不再直接沿用旧 `baseline_gate_summary_v2.json`。
+
 - 正式输入不直接保存 12 份大窗口张量：
   先保存基础张量和 `window_manifest`，按需生成具体窗口，避免大量重复磁盘占用；基础张量只保留训练 patch，避免背景区参照 patch 混入主实验。
 
 - baseline 先做 patch 独立，再谈机制：
   `A1-A4` 用共享权重 summary ridge，只比较 internal / weather / blast V2 / blast V3；
   只有 `A4` 稳定优于 `A3` 后，才应该继续到 `PGGC / EDDR / PIR`。
+
+- 第一轮正式深度实验已落地，但 `A4` 尚未稳定压过 `A3`：
+  当前正式六模型首轮结果里，按 `val_mae` 选最佳时 `A1=TCN`、`A2=LSTM`、`A3=TCN`、`A4=LSTM`；按 `test_mae` 看四组实验最佳都落在 `LSTM`，其中 `A3` 略优于 `A4`，因此后续接 `PGGC / EDDR / PIR` 前还需要继续做特征或训练策略迭代。
+
+- `PatchTST` 已修成非原地归一化：
+  为了兼容正式 patch 包装层的反向传播，`models/PatchTST.py` 中涉及输入标准化的 `/=` 被替换成非原地写法，避免梯度图因 in-place 修改而报错。
