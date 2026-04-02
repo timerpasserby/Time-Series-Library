@@ -1,0 +1,13 @@
+experiment_id,branch_name,description,model_name,split,subset,seq_len,pred_len,mae,rmse,mse
+A4,blast_opt,MS-TimeFilter A4: A2 + blast V3 real-coordinate branch,MS-TimeFilter,test,blast_hours,96,12,0.054253093898296356,0.07299289238634409,0.005327962338924408
+A4,blast_opt,MS-TimeFilter A4: A2 + blast V3 real-coordinate branch,MS-TimeFilter,test,non_event_hours,96,12,0.13998213410377502,0.4676509529575952,0.2186974138021469
+A4,blast_opt,MS-TimeFilter A4: A2 + blast V3 real-coordinate branch,MS-TimeFilter,test,rain_hours,96,12,0.1383381187915802,0.4137301100534086,0.1711726039648056
+A4,blast_opt,MS-TimeFilter A4: A2 + blast V3 real-coordinate branch,MS-TimeFilter,val,blast_hours,96,12,0.07391546666622162,0.12359865539355266,0.015276627615094185
+A4,blast_opt,MS-TimeFilter A4: A2 + blast V3 real-coordinate branch,MS-TimeFilter,val,non_event_hours,96,12,0.0656980574131012,0.08827458331161807,0.007792402058839798
+A4,blast_opt,MS-TimeFilter A4: A2 + blast V3 real-coordinate branch,MS-TimeFilter,val,rain_hours,96,12,0.04533243179321289,0.05748992540118685,0.0033050915226340294
+A4,main,MS-TimeFilter A4: A2 + blast V3 real-coordinate branch,MS-TimeFilter,test,blast_hours,96,12,0.0508304238319397,0.066758337392691,0.004456675611436367
+A4,main,MS-TimeFilter A4: A2 + blast V3 real-coordinate branch,MS-TimeFilter,test,non_event_hours,96,12,0.13575036823749542,0.4676712497914618,0.21871639788150787
+A4,main,MS-TimeFilter A4: A2 + blast V3 real-coordinate branch,MS-TimeFilter,test,rain_hours,96,12,0.1331799477338791,0.41814714706681055,0.17484703660011292
+A4,main,MS-TimeFilter A4: A2 + blast V3 real-coordinate branch,MS-TimeFilter,val,blast_hours,96,12,0.07653205841779709,0.12423632215572339,0.015434663742780685
+A4,main,MS-TimeFilter A4: A2 + blast V3 real-coordinate branch,MS-TimeFilter,val,non_event_hours,96,12,0.07642660290002823,0.09964076650799984,0.009928282350301743
+A4,main,MS-TimeFilter A4: A2 + blast V3 real-coordinate branch,MS-TimeFilter,val,rain_hours,96,12,0.05199146643280983,0.06706064718918625,0.004497130401432514

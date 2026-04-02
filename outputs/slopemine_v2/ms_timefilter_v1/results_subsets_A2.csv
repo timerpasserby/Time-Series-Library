@@ -1,0 +1,7 @@
+experiment_id,branch_name,description,model_name,split,subset,seq_len,pred_len,mae,rmse,mse
+A2,main,MS-TimeFilter A2: internal + weather branch,MS-TimeFilter,test,blast_hours,96,12,0.05146127939224243,0.06806129452791204,0.004632339812815189
+A2,main,MS-TimeFilter A2: internal + weather branch,MS-TimeFilter,test,non_event_hours,96,12,0.13052669167518616,0.467472258193488,0.2185303121805191
+A2,main,MS-TimeFilter A2: internal + weather branch,MS-TimeFilter,test,rain_hours,96,12,0.13072161376476288,0.4149764787948314,0.17220547795295715
+A2,main,MS-TimeFilter A2: internal + weather branch,MS-TimeFilter,val,blast_hours,96,12,0.08250705152750015,0.13262788479433307,0.017590155825018883
+A2,main,MS-TimeFilter A2: internal + weather branch,MS-TimeFilter,val,non_event_hours,96,12,0.06176783889532089,0.0899100888015793,0.008083824068307877
+A2,main,MS-TimeFilter A2: internal + weather branch,MS-TimeFilter,val,rain_hours,96,12,0.049796637147665024,0.06429384519917258,0.004133698530495167

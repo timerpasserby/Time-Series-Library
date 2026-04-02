@@ -1,0 +1,7 @@
+experiment_id,branch_name,description,model_name,split,subset,seq_len,pred_len,mae,rmse,mse
+A3,main,MS-TimeFilter A3: A2 + blast V2 branch,MS-TimeFilter,test,blast_hours,96,12,0.05843193829059601,0.07748878227656893,0.0060045113787055016
+A3,main,MS-TimeFilter A3: A2 + blast V2 branch,MS-TimeFilter,test,non_event_hours,96,12,0.14569585025310516,0.46881312898879224,0.21978574991226196
+A3,main,MS-TimeFilter A3: A2 + blast V2 branch,MS-TimeFilter,test,rain_hours,96,12,0.14040811359882355,0.4150127088370263,0.17223554849624634
+A3,main,MS-TimeFilter A3: A2 + blast V2 branch,MS-TimeFilter,val,blast_hours,96,12,0.08105850219726562,0.1253420946796061,0.01571064069867134
+A3,main,MS-TimeFilter A3: A2 + blast V2 branch,MS-TimeFilter,val,non_event_hours,96,12,0.08200158923864365,0.10552948951128203,0.011136473156511784
+A3,main,MS-TimeFilter A3: A2 + blast V2 branch,MS-TimeFilter,val,rain_hours,96,12,0.05883655324578285,0.07415230813744232,0.005498564802110195

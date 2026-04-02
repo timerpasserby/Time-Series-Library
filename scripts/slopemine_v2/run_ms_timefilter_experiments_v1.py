@@ -100,6 +100,7 @@ def ensure_output_dirs(output_root: Path) -> dict[str, Path]:
         "predictions": output_root / "predictions",
         "figures": output_root / "figures",
         "debug": output_root / "debug",
+        "evaluations": output_root / "evaluations",
     }
     for path in paths.values():
         path.mkdir(parents=True, exist_ok=True)

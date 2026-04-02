@@ -200,7 +200,7 @@ def build_dense_debug_matrix(
         cols = indices[row_idx, mask[row_idx]]
         vals = weights[row_idx, mask[row_idx]]
         if len(cols) > 0:
-            dense[row_idx, cols] += vals.cpu()
+            dense[row_idx, cols.cpu()] += vals.cpu()
     return dense
 
 
