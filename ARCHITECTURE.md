@@ -122,5 +122,8 @@
 - `MS-TimeFilter` 与旧 formal wrapper 并存：
   旧 `formal_round1` 链路继续服务 `LSTM / TCN / DLinear / PatchTST / STGCN / TimeFilter` 参考基线；新的机制实验不再把 weather / blast 直接拼到 patch 特征后再压成单标量，而是通过多分支 token 融合接入 `TimeFilter_Backbone`。
 
-- `PGGC / EDDR / PIR` 当前只算“代码和烟测完成”：
-  由于 `96 x 307` token 图在 CPU 上训练压力很大，本地当前只完成了 `A2 / C2 / C3` 的前向与 1-epoch 小样本烟测；完整正式矩阵应在服务器上运行 `run_ms_timefilter_experiments_v1.py` 后再写入结论。
+- `PGGC / EDDR / PIR` 现在已经有正式机制结果：
+  `run_ms_timefilter_experiments_v1.py` 会在冻结后的 `split_cand_01`、`seq_len=96`、`pred_len=12` 上统一跑 `A2 / A3 / A4 / C1 / C2 / C3`；当前主模型固定为 `C2 main = PGGC + EDDR`，`PIR` 对应的 `C3` 暂未带来稳定收益，因此默认降级为辅助约束。
+
+- 第四章论文图件有独立导出入口：
+  `generate_chapter4_figures_v1.py` 只读取冻结后的正式结果文件，不重新训练模型；它统一导出总体性能图、子集对比图、典型事件窗口、patch 级误差热力图、PGGC 三联图、EDDR 路由图和平滑性对比图到 `outputs/slopemine_v2/chapter4_figures_v1`。

@@ -381,6 +381,8 @@ This workspace now includes a local `slopemine v2` pipeline for slope monitoring
 - `scripts/slopemine_v2/generate_proxy_blast_ledger.py`: Proxy blast ledger exporter for V3 method development and sensitivity analysis.
 - `scripts/slopemine_v2/analyze_blast_v3_variants.py`: Local event-sensitive blast V3 variant analyzer for current/proxy ledgers.
 - `scripts/slopemine_v2/run_patch_baselines_v2.py`: Baseline runner for task F (`A1-A4` only).
+- `scripts/slopemine_v2/run_ms_timefilter_experiments_v1.py`: Formal `MS-TimeFilter` mechanism runner for `A2/A3/A4/C1/C2/C3`.
+- `scripts/slopemine_v2/generate_chapter4_figures_v1.py`: Paper-ready Chapter 4 figure exporter for the frozen formal protocol.
 - `dataset/slopemine_v2/`: Main CSV/NPZ outputs for frozen zone rules, metadata, refined patch variants, series, blast features, adjacency, and window manifest.
 - `outputs/slopemine_v2/`: Figures, diagnostics, the formal diagnostic package, and baseline evaluation results.
 
@@ -399,8 +401,9 @@ scripts/slopemine_v2/run_patch_baselines_v2.py \
 ### Status
 
 - Done: frozen zone-rule export, refined patch metadata with background-zone special handling, `patch_series_v2_ps10.csv`, formal diagnostic package, paper-ready final zone assignment map, three proxy blast ledgers plus proxy V3 features, baseline ablations A1-A4, total/subset metric tables, patch heatmap, representative event plot, and gate summary.
+- Done: formal `MS-TimeFilter` mechanism experiments in `outputs/slopemine_v2/ms_timefilter_v1`, current main model fixed as `C2 main = PGGC + EDDR`, plus a paper-ready Chapter 4 figure pack in `outputs/slopemine_v2/chapter4_figures_v1`.
 - Note: the original continuous cumulative `current_v3 / proxy_v3` features should now be treated as references only. The current local event-sensitive recommendation is `V3a_truncated_Rc60_Hc6`, based on `outputs/slopemine_v2/blast_v3_variants/blast_v3_variant_compare.csv`.
-- Pending: `PGGC / EDDR / PIR` mechanism stage should only continue after checking `outputs/slopemine_v2/baseline_v2/baseline_gate_summary_v2.json`.
+- Note: `PIR` is currently downgraded to an auxiliary constraint because `C3` does not stably outperform `C2` on the frozen formal protocol.
 
 ## Search Record
 

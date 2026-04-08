@@ -38,7 +38,7 @@ from data_provider.slopemine_formal import (  # noqa: E402
 )
 from models.ms_timefilter import MSTimeFilter  # noqa: E402
 from models.slopemine_formal_wrappers import FormalPatchModel, count_parameters, masked_mse_loss  # noqa: E402
-from plot_utils_v2 import setup_plot_style  # noqa: E402
+from plot_utils_v2 import setup_plot_style, summarize_graph_matrix  # noqa: E402
 from run_formal_patch_experiments_v1 import (  # noqa: E402
     build_dataloaders,
     compute_metrics,
@@ -792,15 +792,56 @@ def plot_multi_prediction_windows(
     plt.close(fig)
 
 
-def plot_graph_heatmap(matrix: torch.Tensor, title: str, output_path: Path) -> None:
+def plot_graph_heatmap(
+    matrix: torch.Tensor,
+    output_path: Path,
+    *,
+    title: str | None = None,
+    time_block_count: int,
+    positive_display_offset: float = 0.5,
+) -> dict[str, float | int | tuple[int, int]]:
+    """绘制 PGGC 调试热力图，仅对正值做显示偏移以增强可见性。"""
+
+    matrix_np = matrix.detach().cpu().numpy().astype(np.float32, copy=True)
+    display_matrix = matrix_np.copy()
+    display_matrix[display_matrix > 0] += float(positive_display_offset)
+
     fig, ax = plt.subplots(figsize=(7.8, 6.8))
-    image = ax.imshow(matrix.numpy(), cmap="viridis", aspect="auto")
-    ax.set_title(title)
+    image = ax.imshow(display_matrix, cmap="viridis", aspect="auto", interpolation="nearest")
+    if title:
+        ax.set_title(title)
     ax.set_xlabel("token_j")
     ax.set_ylabel("token_i")
     fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
     fig.savefig(output_path, dpi=220)
     plt.close(fig)
+    return summarize_graph_matrix(matrix_np)
+
+
+def save_graph_debug_bundle(
+    *,
+    output_path: Path,
+    graph_state: dict[str, Any],
+    experiment_id: str,
+    branch_name: str,
+    debug_sample_split: str,
+    debug_sample_id: int,
+    patch_count: int,
+    time_block_count: int,
+) -> None:
+    np.savez_compressed(
+        output_path,
+        experiment_id=str(experiment_id),
+        branch_name=str(branch_name),
+        debug_sample_split=str(debug_sample_split),
+        debug_sample_id=int(debug_sample_id),
+        patch_count=int(patch_count),
+        time_block_count=int(time_block_count),
+        token_count=int(graph_state["a_final_dense"].shape[0]),
+        a_prior_dense=graph_state["a_prior_dense"].detach().cpu().numpy(),
+        a_learned_dense=graph_state["a_learned_dense"].detach().cpu().numpy(),
+        a_final_dense=graph_state["a_final_dense"].detach().cpu().numpy(),
+    )
 
 
 def plot_gate_usage(gate_mean: np.ndarray, output_path: Path, title: str) -> None:
@@ -940,7 +981,14 @@ def write_graph_debug_report(
     branch_name: str,
     graph_state: dict[str, Any],
     heatmap_paths: dict[str, Path],
+    debug_bundle_path: Path,
+    time_block_count: int,
 ) -> None:
+    matrix_stats = {
+        "A_prior": summarize_graph_matrix(graph_state["a_prior_dense"]),
+        "A_learned": summarize_graph_matrix(graph_state["a_learned_dense"]),
+        "A_final": summarize_graph_matrix(graph_state["a_final_dense"]),
+    }
     lines = [
         "# graph_debug_report_C1",
         "",
@@ -948,12 +996,36 @@ def write_graph_debug_report(
         f"- 空间先验邻接最大度：`{int(graph_state['spatial_mask'].sum(dim=-1).max().item())}`。",
         f"- 时间先验邻接最大度：`{int(graph_state['temporal_mask'].sum(dim=-1).max().item())}`。",
         f"- learned top-k：`{graph_state['learned_indices'].shape[-1]}`。",
+        f"- time_block_count：`{int(time_block_count)}`。",
+        "- 显示说明：原始矩阵保持不变，出图时仅对正值边权额外做 `+0.5` 的显示偏移，用于让稀疏结构更明显。",
         "",
         "## Heatmaps",
         "",
     ]
     for name, path in heatmap_paths.items():
         lines.append(f"- `{name}`: `{path}`")
+    lines.extend(
+        [
+            f"- `graph_debug_C1.npz`: `{debug_bundle_path}`",
+            "",
+            "## Matrix Stats",
+            "",
+        ]
+    )
+    for name in ["A_prior", "A_learned", "A_final"]:
+        stats = matrix_stats[name]
+        shape = stats["shape"]
+        lines.extend(
+            [
+                f"### {name}",
+                "",
+                f"- shape：`{shape[0]} x {shape[1]}`。",
+                f"- nonzero_ratio：`{float(stats['nonzero_ratio']):.6f}`（nonzero_count=`{int(stats['nonzero_count'])}`）。",
+                f"- 正值统计：`p50={float(stats['positive_p50']):.6f}`、`p90={float(stats['positive_p90']):.6f}`、`p99={float(stats['positive_p99']):.6f}`、`max={float(stats['positive_max']):.6f}`。",
+                f"- 显示上限：正值 `p99.5={float(stats['positive_p995']):.6f}`。",
+                "",
+            ]
+        )
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -1239,15 +1311,29 @@ def main() -> None:
         "A_learned": output_dirs["figures"] / "graph_A_learned_C1.png",
         "A_final": output_dirs["figures"] / "graph_A_final_C1.png",
     }
-    plot_graph_heatmap(graph_state["a_prior_dense"], "C1 A_prior", graph_heatmap_paths["A_prior"])
-    plot_graph_heatmap(graph_state["a_learned_dense"], "C1 A_learned", graph_heatmap_paths["A_learned"])
-    plot_graph_heatmap(graph_state["a_final_dense"], "C1 A_final", graph_heatmap_paths["A_final"])
+    time_block_count = int(c1_model.time_block_count)
+    plot_graph_heatmap(graph_state["a_prior_dense"], graph_heatmap_paths["A_prior"], time_block_count=time_block_count)
+    plot_graph_heatmap(graph_state["a_learned_dense"], graph_heatmap_paths["A_learned"], time_block_count=time_block_count)
+    plot_graph_heatmap(graph_state["a_final_dense"], graph_heatmap_paths["A_final"], time_block_count=time_block_count)
+    graph_debug_bundle_path = output_root / "graph_debug_C1.npz"
+    save_graph_debug_bundle(
+        output_path=graph_debug_bundle_path,
+        graph_state=graph_state,
+        experiment_id="C1",
+        branch_name="main",
+        debug_sample_split=debug_split_name,
+        debug_sample_id=int(debug_sample_id),
+        patch_count=int(bundle.target.shape[1]),
+        time_block_count=time_block_count,
+    )
     write_graph_debug_report(
         output_path=output_root / "graph_debug_report_C1.md",
         experiment_id="C1",
         branch_name="main",
         graph_state=graph_state,
         heatmap_paths=graph_heatmap_paths,
+        debug_bundle_path=graph_debug_bundle_path,
+        time_block_count=time_block_count,
     )
     write_simple_comparison_md(
         output_root / "comparison_A4_C1.md",

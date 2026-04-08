@@ -103,8 +103,14 @@ def resolve_device(device_name: str) -> torch.device:
         if not torch.cuda.is_available():
             raise RuntimeError("配置要求使用 CUDA，但当前环境不可用。")
         return torch.device("cuda")
+    if device_name == "mps":
+        if not torch.backends.mps.is_built() or not torch.backends.mps.is_available():
+            raise RuntimeError("配置要求使用 MPS，但当前环境不可用。")
+        return torch.device("mps")
     if torch.cuda.is_available():
         return torch.device("cuda")
+    if torch.backends.mps.is_built() and torch.backends.mps.is_available():
+        return torch.device("mps")
     return torch.device("cpu")
 
 
