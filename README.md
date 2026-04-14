@@ -12,6 +12,7 @@ TSLib is an open-source library for deep learning researchers, especially for de
 - 第一轮正式结果显示：按 `val_mae` 选最佳时 `A1=TCN`、`A2=LSTM`、`A3=TCN`、`A4=LSTM`；按 `test_mae` 看四组实验最佳都在 `LSTM`，且 `A3` 略优于 `A4`，说明这一轮里 `blast V3 real-coordinate` 还没有稳定优于 `blast V2`。
 - `models/components/weather_encoder.py`、`models/components/ms_timefilter_graph.py`、`models/ms_timefilter.py` 和 `scripts/slopemine_v2/run_ms_timefilter_experiments_v1.py` 组成新的 `MS-TimeFilter` 机制实验链路：正式天气分支不再用 naive concat，而是 `Linear Projection + Multi-scale Conv1D + Temporal Attention + Time-block Pooling`，并在 `A4` 基础上最小侵入式接入 `PGGC / EDDR / PIR`。
 - 新的 `MS-TimeFilter` runner 固定使用冻结后的正式 split、`patch_size=10`、`307` 个训练 patch、`drop_global_missing` 和 `seq_len=96 / pred_len=12`；本地已完成 shape / 1-epoch 小样本烟测，完整正式矩阵建议在服务器上运行。
+- `data_provider/slopemine_patch_graph.py`、`models/components/spatial_gnn.py`、`models/spatial_gnn_timefilter.py` 和 `scripts/slopemine_v2/smoke_spatial_gnn_timefilter_v1.py` 新增了一条独立的 `SpatialGNN + TimeFilter` 实验支线：保持当前正式 `307 patch` 作为节点，先做逐时间步共享的空间 GNN，再送入 `TimeFilter`。这条支线不把节点重采样成 `100` 个规则网格。
 
 > **中文文档**：[README_zh.md](./README_zh.md)
 
@@ -382,6 +383,8 @@ This workspace now includes a local `slopemine v2` pipeline for slope monitoring
 - `scripts/slopemine_v2/analyze_blast_v3_variants.py`: Local event-sensitive blast V3 variant analyzer for current/proxy ledgers.
 - `scripts/slopemine_v2/run_patch_baselines_v2.py`: Baseline runner for task F (`A1-A4` only).
 - `scripts/slopemine_v2/run_ms_timefilter_experiments_v1.py`: Formal `MS-TimeFilter` mechanism runner for `A2/A3/A4/C1/C2/C3`.
+- `scripts/slopemine_v2/build_spatial_grid_dataset_v1.py`: Optional helper that can aggregate ps10 patches into a regular 10x10 grid bundle for exploratory graph experiments.
+- `scripts/slopemine_v2/smoke_spatial_gnn_timefilter_v1.py`: Full-sequence smoke test for the new `SpatialGNN + TimeFilter` branch; the default path now uses the frozen `307`-patch graph.
 - `scripts/slopemine_v2/generate_chapter4_figures_v1.py`: Paper-ready Chapter 4 figure exporter for the frozen formal protocol.
 - `dataset/slopemine_v2/`: Main CSV/NPZ outputs for frozen zone rules, metadata, refined patch variants, series, blast features, adjacency, and window manifest.
 - `outputs/slopemine_v2/`: Figures, diagnostics, the formal diagnostic package, and baseline evaluation results.

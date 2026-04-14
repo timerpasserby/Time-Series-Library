@@ -42,6 +42,15 @@
 - `models/ms_timefilter.py`
   负责正式 `MS-TimeFilter` 主模型：把 internal / weather / blast V2 / blast V3 组织成 patch-major、block-minor token，按实验阶段接入 `A2 / A3 / A4 / C1 / C2 / C3`，最后复用原始 `TimeFilter_Backbone` 做 temporal backbone。
 
+- `data_provider/slopemine_patch_graph.py`
+  负责从冻结的 `patch_tensor_base_v2_ps10.npz + patch_meta_v2_ps10_bg_excluded.csv` 构造 `307` 个 patch 的静态 8 邻接图，不再额外重采样成 `100` 个规则网格节点。
+
+- `models/components/spatial_gnn.py`
+  负责逐时间步共享参数的空间 GNN 编码器，当前提供 dense `GraphSAGE / GCN` 两种轻量实现，输入形状为 `[B, T, N, F]`，输出形状为 `[B, T, N, d_model]`。
+
+- `models/spatial_gnn_timefilter.py`
+  负责新的 `SpatialGNN + TimeFilter` 支线：先在 `307 patch` 静态图上做逐时间步空间编码，再把每个 patch 的时序送入原始 `TimeFilter_Backbone`。当前全长 `712` 小时输入下默认采用较大的 `patch_len=89`，避免 `307 x 712` 直接展开后产生过大的 `O(L^2)` 图学习开销。
+
 - `scripts/slopemine_v2/run_formal_patch_experiments_v1.py`
   负责第一轮正式 patch 深度实验：在冻结的正式 split 与 `seq_len=24 / pred_len=12` 下运行六种模型的 `A1-A4`，输出 `results_main_A1_A4.csv`、`results_subsets_A1_A4.csv`、对比表、最佳模型、预测文件和图表。
 
@@ -76,6 +85,9 @@
 5. `run_ms_timefilter_experiments_v1.py`
    读取同一套冻结基础张量和正式 split；
    生成新的 `window_manifest_ms_timefilter_ps10_seq96_pred12.csv`，再分别构造旧 formal wrapper baseline 和多分支 `MS-TimeFilter` dataloader，最后统一输出 `A2~C3` 正式结果、参考对照、天气/图/gate/PIR 调试文件和决策报告。
+
+6. `smoke_spatial_gnn_timefilter_v1.py`
+   读取冻结后的 `307 patch` formal bundle 和 patch 图结构，直接对全长 `712` 小时序列做一次 `SpatialGNN + TimeFilter` 前向烟测，输出 `pred=[1, 12, 307]` 级别的 shape 校验报告，不触发训练。
 
 ## 关键设计决定
 
@@ -121,6 +133,9 @@
 
 - `MS-TimeFilter` 与旧 formal wrapper 并存：
   旧 `formal_round1` 链路继续服务 `LSTM / TCN / DLinear / PatchTST / STGCN / TimeFilter` 参考基线；新的机制实验不再把 weather / blast 直接拼到 patch 特征后再压成单标量，而是通过多分支 token 融合接入 `TimeFilter_Backbone`。
+
+- `SpatialGNN + TimeFilter` 是独立探索支线：
+  这条线当前固定以冻结后的 `307 patch` 为图节点，并按 patch lattice 的 8 邻接构造静态空间图；不再把节点强行降成 `100` 个规则网格，以免和现有正式主实验口径混用。
 
 - `PGGC / EDDR / PIR` 现在已经有正式机制结果：
   `run_ms_timefilter_experiments_v1.py` 会在冻结后的 `split_cand_01`、`seq_len=96`、`pred_len=12` 上统一跑 `A2 / A3 / A4 / C1 / C2 / C3`；当前主模型固定为 `C2 main = PGGC + EDDR`，`PIR` 对应的 `C3` 暂未带来稳定收益，因此默认降级为辅助约束。

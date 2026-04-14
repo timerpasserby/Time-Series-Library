@@ -7,6 +7,7 @@
 - 新增 `MS-TimeFilter` 正式实验链路：已完成多分支 formal dataset、正式天气分支 `weather_encoder`、`PGGC / EDDR / PIR` 最小实现、`MSTimeFilter` 主模型和统一 runner，并已落盘 `outputs/slopemine_v2/ms_timefilter_v1` 的正式结果；当前主模型版本固定为 `C2 main = PGGC + EDDR`。
 - 新增第四章图件包导出链路：`generate_chapter4_figures_v1.py` 会基于冻结后的 `formal_round1 + ms_timefilter_v1` 正式结果统一导出论文图，输出目录为 `outputs/slopemine_v2/chapter4_figures_v1`。
 - 新增独立组图脚本 `scripts/slopemine_v2/generate_ch4_weather_eddr_group_v1.py`：用于在不改并行编辑中的主图脚本前提下，单独导出“天气分支 + EDDR”纵向组图，并把结果补写进现有 `figure_manifest_ch4_results.md`。
+- 新增 `SpatialGNN + TimeFilter` 探索支线：当前以冻结后的 `307 patch` 为节点，构造 patch lattice 的静态 8 邻接图，并已通过全长 `712 -> 12` 的前向烟测；shape 报告位于 `outputs/slopemine_v2/spatial_gnn_timefilter_v1/patch307/smoke_report.md`。
 - 已完成 PGGC 图显示调整：保留 `graph_debug_C1.npz` 原始矩阵包，但当前出图口径改为“仅对正值边权做 `+0.5` 显示偏移”，并恢复为旧版三联拼图样式，使结果更接近论文当前参考图。
 - `run_ms_timefilter_experiments_v1.py` 的 `plot_graph_heatmap` 现已支持不传标题直接出图，`graph_heatmap_paths` 这三张 PGGC 单图调用已切到无标题模式并验证可跑通。
 - `analyze_c2_main_v1.py` 的 `eddr_routing_analysis` 当前显示口径已按人工偏移更新：左侧柱状图对 `blast/rain` 的三专家权重做固定显示增量，右侧散点图对 `spatiotemporal` 的 `blast/rain` 点位做对应抬升并改成三类着色。
@@ -37,5 +38,6 @@
 - 正式深度实验固定使用 `window_manifest_v1_ps10.csv`，并明确采用 `drop_global_missing` 策略剔除 8 个全局缺失小时；不再复用旧 `window_manifest_v2_ps10.csv` 的默认切分。
 - 第一轮正式 patch 深度实验暂时只做到 `A1-A4`；`PGGC / EDDR / PIR` 仍未接入，且当前结果不支持直接宣称 `A4` 已优于 `A3`。
 - `PGGC / EDDR / PIR` 现在都已接入新的 `MS-TimeFilter` runner，并已有正式结果；当前结论是 `C2(main)` 可作为机制主线版本，`PIR` 对应的 `C3(main)` 暂未带来稳定增益，因此默认降级为辅助约束。
+- `SpatialGNN + TimeFilter` 这条新支线不复用 `100` 节点规则网格草稿口径；当前正式实现固定保留 `307 patch` 节点，并通过较大的 `patch_len=89` 控制原始 `TimeFilter` 在全长 `712` 输入下的图学习开销。
 - PGGC 解释图当前固定口径是：原始矩阵不改、`graph_debug_C1.npz` 继续留存，但最终单图显示时仅对正值边权做 `+0.5` 偏移，章节图继续拼接三张单图；本地缺失 checkpoint 时，优先复用远端已有 `C1_main.pt` 拉回后重绘，不重新训练。
 - “天气分支 + EDDR”主图的论文编号与仓库编号固定解耦：`A2(base) -> baseline_naive_weather_concat`、`C1 -> A2_main`、`C2 -> C1_main`、`C5 -> C3_main`，最终图注和 manifest 只暴露论文编号；其中独立脚本的 `(b)` 面板沿用 paper `C2/C5` 标签，但实际显示曲线已切成连续拼接后的 display 版本。
