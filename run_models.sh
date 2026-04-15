@@ -31,6 +31,7 @@ $PYTHON_PATH -u run.py \
   --itr 1 \
   --batch_size 4 \
   --train_epochs 1 \
+  --target node_0 \
   --num_workers 0
 
 # 2. PatchTST
@@ -58,6 +59,7 @@ $PYTHON_PATH -u run.py \
   --itr 1 \
   --batch_size 4 \
   --train_epochs 1 \
+  --target node_0 \
   --num_workers 0
 
 # 3. TimeFilter
@@ -85,4 +87,5 @@ $PYTHON_PATH -u run.py \
   --itr 1 \
   --batch_size 4 \
   --train_epochs 1 \
+  --target node_0 \
   --num_workers 0
