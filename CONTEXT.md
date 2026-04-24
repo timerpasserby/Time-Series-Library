@@ -1,12 +1,10 @@
 # 当前正在做什么
-`run_models.sh` 的 TimeFilter 配置已去掉 `target`，改为直接预测全部节点的未来位移。
+正在增强 `data/radar/gemi_sim.py` 的单次位移响应，让天气和爆破扰动在雷达位移里更明显。
 
 # 上次停在哪个位置
-2026-04-16：`run_models.sh` 已增加日志重定向到 `logs/run_models_*.log`，方便保存完整训练过程。
+2026-04-17：已放大降雨/爆破响应系数，并修复 `sim_radar_hourly_displacement.csv` 时间列丢失问题；新生成数据中，强降雨时段平均单次位移约 `2.77`，干燥时段约 `0.42`。
 
 # 近期关键决定和原因
-- **解释器固定**：`run_models.sh` 已切到 `/opt/homebrew/Caskroom/miniforge/base/envs/tslib/bin/python`。
-- **日志留存**：脚本输出通过 `tee` 写入时间戳日志文件，便于回看训练过程。
-- **全节点预测**：TimeFilter 使用 `features=M`，`enc_in/c_out=1000`，不需要 `target`。
-- **MPS 退回 CPU**：当前 macOS 版本不支持 MPS，TimeFilter 改走 CPU 以避免 `RuntimeError: Invalid buffer size` 和设备初始化失败。
-- **TimeFilter 缩参**：将 `patch_len` 提到 `96` 并把批量、宽度、层数降下来，先确保 1000 节点场景能跑通。
+- **放大天气响应**：同时使用累积降雨、当前降雨和湿度软化，解决单次位移幅值过小的问题。
+- **放大爆破响应**：减弱距离衰减并增加基础传播项，让非核心区也能看到爆破扰动。
+- **时间列显式写出**：`sim_radar_hourly_displacement.csv` 改为显式写出 `report_time` 列，避免后续天气/爆破对齐失败。
